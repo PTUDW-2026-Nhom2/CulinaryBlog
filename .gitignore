@@ -9,6 +9,8 @@ out/
 .env
 .env.*
 !.env.example
+# Ngoại lệ: .env dev-only (không chứa secret thật) đi kèm dump DB mẫu để team import nhanh.
+!database/.env
 
 coverage/
 .nyc_output/
