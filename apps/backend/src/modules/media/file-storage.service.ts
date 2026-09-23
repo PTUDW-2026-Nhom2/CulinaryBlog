@@ -14,11 +14,19 @@ export interface StoredFile {
   size: number;
 }
 
+export interface UploadFile {
+  buffer: Buffer;
+  mimetype: string;
+  originalname: string;
+  size: number;
+}
+
 export interface IFileStorageService {
   uploadAsync(
-    file: { buffer: Buffer; mimetype: string; originalname: string; size: number },
+    file: UploadFile,
     folder: string,
   ): Promise<StoredFile>;
+  deleteAsync(key: string): Promise<void>;
 }
 
 export const SUPPORTED_MIME_TYPES = new Set([
@@ -27,13 +35,6 @@ export const SUPPORTED_MIME_TYPES = new Set([
   'image/webp',
   'image/avif',
 ]);
-
-const extensionByMime: Record<string, string> = {
-  'image/jpeg': 'jpg',
-  'image/png': 'png',
-  'image/webp': 'webp',
-  'image/avif': 'avif',
-};
 
 export function hasValidMagicBytes(buffer: Buffer, mimetype: string): boolean {
   switch (mimetype) {
@@ -70,11 +71,17 @@ export class FileStorageService implements IFileStorageService {
   constructor(@Inject(FILE_STORAGE) private readonly storage: IFileStorageService) {}
 
   uploadAsync(
-    file: { buffer: Buffer; mimetype: string; originalname: string; size: number },
+    file: UploadFile,
     folder: string,
   ): Promise<StoredFile> {
     validateUpload(file);
     const safeFolder = folder.replace(/[^a-zA-Z0-9/_-]/g, '').replace(/^\/+|\/+$/g, '') || 'uploads';
     return this.storage.uploadAsync(file, safeFolder);
+  }
+
+  deleteAsync(key: string): Promise<void> {
+    const safeKey = key.replace(/^\/+/, '').replace(/\.\.+/g, '');
+    if (!safeKey) return Promise.resolve();
+    return this.storage.deleteAsync(safeKey);
   }
 }

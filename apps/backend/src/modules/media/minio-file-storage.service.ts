@@ -1,8 +1,8 @@
-import { CreateBucketCommand, PutBucketPolicyCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
+import { CreateBucketCommand, DeleteObjectCommand, PutBucketPolicyCommand, PutObjectCommand, S3Client } from '@aws-sdk/client-s3';
 import { Injectable, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { randomUUID } from 'node:crypto';
-import { IFileStorageService, StoredFile, validateUpload } from './file-storage.service';
+import { IFileStorageService, StoredFile, UploadFile, validateUpload } from './file-storage.service';
 
 @Injectable()
 export class MinioFileStorageService implements IFileStorageService, OnModuleInit {
@@ -46,7 +46,7 @@ export class MinioFileStorageService implements IFileStorageService, OnModuleIni
   }
 
   async uploadAsync(
-    file: { buffer: Buffer; mimetype: string; originalname: string; size: number },
+    file: UploadFile,
     folder: string,
   ): Promise<StoredFile> {
     validateUpload(file);
@@ -62,5 +62,18 @@ export class MinioFileStorageService implements IFileStorageService, OnModuleIni
     }));
 
     return { url: `${this.publicUrl}/${this.bucket}/${key}`, key, contentType: file.mimetype, size: file.size };
+  }
+
+  async deleteAsync(key: string): Promise<void> {
+    let lastError: unknown;
+    for (let attempt = 1; attempt <= 3; attempt += 1) {
+      try {
+        await this.client.send(new DeleteObjectCommand({ Bucket: this.bucket, Key: key }));
+        return;
+      } catch (error) {
+        lastError = error;
+      }
+    }
+    throw lastError;
   }
 }
