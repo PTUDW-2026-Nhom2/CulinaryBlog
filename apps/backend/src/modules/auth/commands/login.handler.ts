@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { ForbiddenException, HttpException, HttpStatus, Inject, UnauthorizedException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { ConfigService } from '@nestjs/config';
@@ -5,7 +6,8 @@ import { JwtService, JwtSignOptions } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { and, eq } from 'drizzle-orm';
 import { DATABASE_CONNECTION, Database } from '../../../infrastructure/database/database.module';
-import { users } from '../../../infrastructure/database/schema';
+import { refreshTokens, users } from '../../../infrastructure/database/schema';
+import { hashToken } from '../hash-token';
 import { LoginCommand } from './login.command';
 
 export interface LoginResult {
@@ -104,12 +106,22 @@ export class LoginHandler implements ICommandHandler<LoginCommand, LoginResult> 
       secret: accessSecret,
       expiresIn: accessExpiresIn as JwtSignOptions['expiresIn'],
     });
-    // ponytail: refresh token ở đây chỉ là JWT ký rời, chưa lưu tokenHash/rotation/reuse-detection
-    // trong DB như spec (refresh_tokens table chưa tồn tại) — nên /auth/refresh, /auth/logout chưa
-    // implement được. Upgrade: thêm bảng refresh_tokens + handler refresh/logout khi cần.
-    const refreshToken = await this.jwtService.signAsync(payload, {
-      secret: refreshSecret,
-      expiresIn: refreshExpiresIn as JwtSignOptions['expiresIn'],
+    // jti ngẫu nhiên: đảm bảo 2 refresh token issue cùng giây (sub+iat+exp trùng) vẫn là 2 chuỗi
+    // JWT khác nhau — token_hash lưu DB có ràng buộc unique nên cần tránh 2 token trùng bytes.
+    const refreshToken = await this.jwtService.signAsync(
+      { ...payload, jti: randomUUID() },
+      {
+        secret: refreshSecret,
+        expiresIn: refreshExpiresIn as JwtSignOptions['expiresIn'],
+      },
+    );
+
+    const { exp: refreshExp } = this.jwtService.decode<{ exp: number }>(refreshToken);
+    await this.db.insert(refreshTokens).values({
+      userId: user.id,
+      tokenHash: hashToken(refreshToken),
+      expiresAt: new Date(refreshExp * 1000),
+      createdByIp: command.ip ?? null,
     });
 
     const { exp, iat } = this.jwtService.decode<{ exp: number; iat: number }>(accessToken);

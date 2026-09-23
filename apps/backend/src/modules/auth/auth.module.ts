@@ -5,9 +5,10 @@ import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
 import { AuthController } from './auth.controller';
 import { LoginHandler } from './commands/login.handler';
+import { RefreshTokenHandler } from './commands/refresh-token.handler';
 import { RegisterHandler } from './commands/register.handler';
 
-const CommandHandlers = [RegisterHandler, LoginHandler];
+const CommandHandlers = [RegisterHandler, LoginHandler, RefreshTokenHandler];
 
 @Module({
   imports: [
