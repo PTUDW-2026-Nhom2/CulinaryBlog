@@ -1,7 +1,9 @@
 import { BadRequestException, Controller, Delete, Post, Query, UploadedFile, UseInterceptors } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiTags } from '@nestjs/swagger';
 import { FileStorageService, UploadFile } from './file-storage.service';
 
+@ApiTags('media')
 @Controller('media')
 export class MediaController {
   constructor(private readonly fileStorage: FileStorageService) {}

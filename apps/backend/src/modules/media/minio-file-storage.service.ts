@@ -16,7 +16,7 @@ export class MinioFileStorageService implements IFileStorageService, OnModuleIni
     this.client = new S3Client({
       endpoint: config.getOrThrow<string>('S3_ENDPOINT'),
       region: config.get<string>('S3_REGION', 'us-east-1'),
-      forcePathStyle: config.get<boolean>('S3_FORCE_PATH_STYLE', true),
+      forcePathStyle: config.get<string>('S3_FORCE_PATH_STYLE', 'true') === 'true',
       credentials: {
         accessKeyId: config.getOrThrow<string>('S3_ACCESS_KEY'),
         secretAccessKey: config.getOrThrow<string>('S3_SECRET_KEY'),
