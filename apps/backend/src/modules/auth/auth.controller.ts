@@ -1,5 +1,5 @@
-import { Body, Controller, HttpCode, HttpStatus, Ip, Post, UseGuards } from '@nestjs/common';
-import { CommandBus } from '@nestjs/cqrs';
+import { Body, Controller, Get, HttpCode, HttpStatus, Ip, Post, UseGuards } from '@nestjs/common';
+import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
 import { AuthenticatedUser } from '../../common/auth/authenticated-user';
@@ -18,13 +18,18 @@ import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { MeResult } from './queries/get-me.handler';
+import { GetMeQuery } from './queries/get-me.query';
 
 @ApiTags('auth')
 @Controller('auth')
 @UseGuards(ThrottlerGuard)
 @Throttle({ default: { limit: 10, ttl: 60_000 } })
 export class AuthController {
-  constructor(private readonly commandBus: CommandBus) {}
+  constructor(
+    private readonly commandBus: CommandBus,
+    private readonly queryBus: QueryBus,
+  ) {}
 
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
@@ -56,5 +61,13 @@ export class AuthController {
   @ApiBearerAuth()
   logout(@CurrentUser() user: AuthenticatedUser, @Body() dto: RefreshTokenDto): Promise<void> {
     return this.commandBus.execute(new LogoutCommand(user.id, dto.refreshToken));
+  }
+
+  @Get('me')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  me(@CurrentUser() user: AuthenticatedUser): Promise<MeResult> {
+    return this.queryBus.execute(new GetMeQuery(user.id));
   }
 }

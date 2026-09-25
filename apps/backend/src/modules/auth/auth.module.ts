@@ -10,6 +10,7 @@ import { LoginHandler } from './commands/login.handler';
 import { LogoutHandler } from './commands/logout.handler';
 import { RefreshTokenHandler } from './commands/refresh-token.handler';
 import { RegisterHandler } from './commands/register.handler';
+import { GetMeHandler } from './queries/get-me.handler';
 
 const CommandHandlers = [
   RegisterHandler,
@@ -18,6 +19,8 @@ const CommandHandlers = [
   GoogleLoginHandler,
   LogoutHandler,
 ];
+
+const QueryHandlers = [GetMeHandler];
 
 @Module({
   imports: [
@@ -35,6 +38,6 @@ const CommandHandlers = [
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 10 }]),
   ],
   controllers: [AuthController],
-  providers: [...CommandHandlers, JwtAuthGuard, ThrottlerGuard],
+  providers: [...CommandHandlers, ...QueryHandlers, JwtAuthGuard, ThrottlerGuard],
 })
 export class AuthModule {}
