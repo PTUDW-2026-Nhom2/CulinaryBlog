@@ -1,11 +1,15 @@
 import { Body, Controller, HttpCode, HttpStatus, Ip, Post, UseGuards } from '@nestjs/common';
 import { CommandBus } from '@nestjs/cqrs';
-import { ApiTags } from '@nestjs/swagger';
+import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { AuthenticatedUser } from '../../common/auth/authenticated-user';
+import { CurrentUser } from '../../common/decorators/current-user.decorator';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { GoogleLoginCommand } from './commands/google-login.command';
 import { TokenPair } from './commands/issue-tokens';
 import { LoginCommand } from './commands/login.command';
 import { LoginResult } from './commands/login.handler';
+import { LogoutCommand } from './commands/logout.command';
 import { RefreshTokenCommand } from './commands/refresh-token.command';
 import { RefreshTokenResult } from './commands/refresh-token.handler';
 import { RegisterCommand } from './commands/register.command';
@@ -44,5 +48,13 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   google(@Body() dto: GoogleLoginDto, @Ip() ip: string): Promise<TokenPair> {
     return this.commandBus.execute(new GoogleLoginCommand(dto.idToken, ip));
+  }
+
+  @Post('logout')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  logout(@CurrentUser() user: AuthenticatedUser, @Body() dto: RefreshTokenDto): Promise<void> {
+    return this.commandBus.execute(new LogoutCommand(user.id, dto.refreshToken));
   }
 }
