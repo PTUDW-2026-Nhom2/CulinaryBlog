@@ -3,13 +3,21 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import { CqrsModule } from '@nestjs/cqrs';
 import { JwtModule } from '@nestjs/jwt';
 import { ThrottlerGuard, ThrottlerModule } from '@nestjs/throttler';
+import { JwtAuthGuard } from '../../common/guards/jwt-auth.guard';
 import { AuthController } from './auth.controller';
 import { GoogleLoginHandler } from './commands/google-login.handler';
 import { LoginHandler } from './commands/login.handler';
+import { LogoutHandler } from './commands/logout.handler';
 import { RefreshTokenHandler } from './commands/refresh-token.handler';
 import { RegisterHandler } from './commands/register.handler';
 
-const CommandHandlers = [RegisterHandler, LoginHandler, RefreshTokenHandler, GoogleLoginHandler];
+const CommandHandlers = [
+  RegisterHandler,
+  LoginHandler,
+  RefreshTokenHandler,
+  GoogleLoginHandler,
+  LogoutHandler,
+];
 
 @Module({
   imports: [
@@ -27,6 +35,6 @@ const CommandHandlers = [RegisterHandler, LoginHandler, RefreshTokenHandler, Goo
     ThrottlerModule.forRoot([{ name: 'default', ttl: 60_000, limit: 10 }]),
   ],
   controllers: [AuthController],
-  providers: [...CommandHandlers, ThrottlerGuard],
+  providers: [...CommandHandlers, JwtAuthGuard, ThrottlerGuard],
 })
 export class AuthModule {}
