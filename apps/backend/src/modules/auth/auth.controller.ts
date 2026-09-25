@@ -2,12 +2,15 @@ import { Body, Controller, HttpCode, HttpStatus, Ip, Post, UseGuards } from '@ne
 import { CommandBus } from '@nestjs/cqrs';
 import { ApiTags } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
+import { GoogleLoginCommand } from './commands/google-login.command';
+import { TokenPair } from './commands/issue-tokens';
 import { LoginCommand } from './commands/login.command';
 import { LoginResult } from './commands/login.handler';
 import { RefreshTokenCommand } from './commands/refresh-token.command';
 import { RefreshTokenResult } from './commands/refresh-token.handler';
 import { RegisterCommand } from './commands/register.command';
 import { RegisterResult } from './commands/register.handler';
+import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
@@ -35,5 +38,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   refresh(@Body() dto: RefreshTokenDto, @Ip() ip: string): Promise<RefreshTokenResult> {
     return this.commandBus.execute(new RefreshTokenCommand(dto.refreshToken, ip));
+  }
+
+  @Post('google')
+  @HttpCode(HttpStatus.OK)
+  google(@Body() dto: GoogleLoginDto, @Ip() ip: string): Promise<TokenPair> {
+    return this.commandBus.execute(new GoogleLoginCommand(dto.idToken, ip));
   }
 }

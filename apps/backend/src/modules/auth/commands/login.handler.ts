@@ -1,20 +1,15 @@
-import { randomUUID } from 'node:crypto';
 import { ForbiddenException, HttpException, HttpStatus, Inject, UnauthorizedException } from '@nestjs/common';
 import { CommandHandler, ICommandHandler } from '@nestjs/cqrs';
 import { ConfigService } from '@nestjs/config';
-import { JwtService, JwtSignOptions } from '@nestjs/jwt';
+import { JwtService } from '@nestjs/jwt';
 import * as argon2 from 'argon2';
 import { and, eq } from 'drizzle-orm';
 import { DATABASE_CONNECTION, Database } from '../../../infrastructure/database/database.module';
-import { refreshTokens, users } from '../../../infrastructure/database/schema';
-import { hashToken } from '../hash-token';
+import { users } from '../../../infrastructure/database/schema';
+import { TokenPair, issueTokens } from './issue-tokens';
 import { LoginCommand } from './login.command';
 
-export interface LoginResult {
-  accessToken: string;
-  refreshToken: string;
-  expiresIn: number;
-}
+export type LoginResult = TokenPair;
 
 const MAX_FAILED_ATTEMPTS = 5;
 const LOCKOUT_MINUTES = 15;
@@ -96,36 +91,6 @@ export class LoginHandler implements ICommandHandler<LoginCommand, LoginResult> 
       });
     }
 
-    const accessSecret = this.config.getOrThrow<string>('JWT_ACCESS_SECRET');
-    const accessExpiresIn = this.config.get<string>('JWT_ACCESS_EXPIRES_IN', '15m');
-    const refreshSecret = this.config.getOrThrow<string>('JWT_REFRESH_SECRET');
-    const refreshExpiresIn = this.config.get<string>('JWT_REFRESH_EXPIRES_IN', '7d');
-
-    const payload = { sub: user.id };
-    const accessToken = await this.jwtService.signAsync(payload, {
-      secret: accessSecret,
-      expiresIn: accessExpiresIn as JwtSignOptions['expiresIn'],
-    });
-    // jti ngẫu nhiên: đảm bảo 2 refresh token issue cùng giây (sub+iat+exp trùng) vẫn là 2 chuỗi
-    // JWT khác nhau — token_hash lưu DB có ràng buộc unique nên cần tránh 2 token trùng bytes.
-    const refreshToken = await this.jwtService.signAsync(
-      { ...payload, jti: randomUUID() },
-      {
-        secret: refreshSecret,
-        expiresIn: refreshExpiresIn as JwtSignOptions['expiresIn'],
-      },
-    );
-
-    const { exp: refreshExp } = this.jwtService.decode<{ exp: number }>(refreshToken);
-    await this.db.insert(refreshTokens).values({
-      userId: user.id,
-      tokenHash: hashToken(refreshToken),
-      expiresAt: new Date(refreshExp * 1000),
-      createdByIp: command.ip ?? null,
-    });
-
-    const { exp, iat } = this.jwtService.decode<{ exp: number; iat: number }>(accessToken);
-
-    return { accessToken, refreshToken, expiresIn: exp - iat };
+    return issueTokens(this.db, this.jwtService, this.config, user.id, command.ip);
   }
 }
