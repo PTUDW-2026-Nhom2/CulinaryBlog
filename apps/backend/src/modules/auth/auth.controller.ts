@@ -1,4 +1,14 @@
-import { Body, Controller, Get, HttpCode, HttpStatus, Ip, Post, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  HttpCode,
+  HttpStatus,
+  Ip,
+  Patch,
+  Post,
+  UseGuards,
+} from '@nestjs/common';
 import { CommandBus, QueryBus } from '@nestjs/cqrs';
 import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { Throttle, ThrottlerGuard } from '@nestjs/throttler';
@@ -14,10 +24,12 @@ import { RefreshTokenCommand } from './commands/refresh-token.command';
 import { RefreshTokenResult } from './commands/refresh-token.handler';
 import { RegisterCommand } from './commands/register.command';
 import { RegisterResult } from './commands/register.handler';
+import { UpdateProfileCommand } from './commands/update-profile.command';
 import { GoogleLoginDto } from './dto/google-login.dto';
 import { LoginDto } from './dto/login.dto';
 import { RefreshTokenDto } from './dto/refresh-token.dto';
 import { RegisterDto } from './dto/register.dto';
+import { UpdateProfileDto } from './dto/update-profile.dto';
 import { MeResult } from './queries/get-me.handler';
 import { GetMeQuery } from './queries/get-me.query';
 
@@ -69,5 +81,16 @@ export class AuthController {
   @ApiBearerAuth()
   me(@CurrentUser() user: AuthenticatedUser): Promise<MeResult> {
     return this.queryBus.execute(new GetMeQuery(user.id));
+  }
+
+  @Patch('me')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  updateMe(
+    @CurrentUser() user: AuthenticatedUser,
+    @Body() dto: UpdateProfileDto,
+  ): Promise<MeResult> {
+    return this.commandBus.execute(new UpdateProfileCommand(user.id, dto));
   }
 }
