@@ -1,69 +1,228 @@
+import type { CategoryDto, PagedResult, RecipeSummaryDto } from "@culinary/shared";
+import { ArrowRight, Search, Timer } from "lucide-react";
 import Image from "next/image";
+import Link from "next/link";
+import { CategoryIcon } from "@/components/CategoryIcon";
+import { RecipeCard } from "@/components/RecipeCard";
+import { apiGet } from "@/lib/api";
 
-export default function Home() {
+// Trang chủ là nội dung công khai, đổi theo nhịp đăng bài -> ISR 5 phút thay vì SSR mỗi request.
+export const revalidate = 300;
+
+// Backend có thể chưa chạy (dev local, CI build) — trang chủ vẫn phải render được,
+// nên mỗi lệnh gọi tự chịu lỗi và trả về giá trị rỗng.
+async function safe<T>(promise: Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await promise;
+  } catch {
+    return fallback;
+  }
+}
+
+const emptyPage: PagedResult<RecipeSummaryDto> = {
+  items: [],
+  totalCount: 0,
+  page: 1,
+  pageSize: 0,
+  totalPages: 0,
+  hasNextPage: false,
+  hasPreviousPage: false,
+};
+
+export default async function HomePage() {
+  const [categories, featured, quick] = await Promise.all([
+    safe(apiGet<CategoryDto[]>("/categories"), [] as CategoryDto[]),
+    safe(apiGet<PagedResult<RecipeSummaryDto>>("/recipes", { pageSize: 6 }), emptyPage),
+    // pageSize 1: chỉ cần totalCount cho con số "dưới 30 phút", không cần danh sách.
+    safe(apiGet<PagedResult<RecipeSummaryDto>>("/recipes", { pageSize: 1, maxCookTime: 30 }), emptyPage),
+  ]);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert h-5 w-[100px]"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the{" "}
-            <code className="rounded bg-black/[.06] px-1.5 py-0.5 font-mono text-[0.9em] dark:bg-white/[.08]">
-              page.tsx
-            </code>{" "}
-            file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <div>
+      <section className="relative overflow-hidden border-b border-border bg-surface">
+        <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-14 sm:px-6 lg:grid-cols-2 lg:py-20">
+          <div>
+            <h1 className="font-display text-4xl leading-[1.05] sm:text-5xl lg:text-6xl">
+              Bữa ngon bắt đầu từ
+              <span className="text-primary"> một công thức thật thà.</span>
+            </h1>
+            <p className="mt-5 max-w-lg text-lg leading-relaxed text-muted-foreground">
+              Mỗi món ở đây đều có thời gian chuẩn bị, thời gian nấu và từng bước thực hiện rõ ràng.
+              Không bước mơ hồ, không thời gian phóng đại.
+            </p>
+
+            {/* form GET thuần: không cần JS, submit sang /search?q=… (route của FR-SRCH). */}
+            <form
+              action="/search"
+              role="search"
+              className="mt-8 grid gap-2 rounded-2xl border border-border bg-card p-2 shadow-card sm:grid-cols-[minmax(0,1fr)_auto]"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+              <div className="relative">
+                <Search
+                  className="pointer-events-none absolute left-3.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden
+                />
+                <input
+                  type="search"
+                  name="q"
+                  aria-label="Tìm công thức"
+                  placeholder="Tối nay bạn nấu gì?"
+                  className="field border-transparent bg-transparent py-3 pl-10"
+                />
+              </div>
+              <button
+                type="submit"
+                className="rounded-xl bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+              >
+                Tìm công thức
+              </button>
+            </form>
+
+            {/* Số liệu lấy từ API (totalCount), không phải con số minh hoạ như mockup. */}
+            {featured.totalCount > 0 && (
+              <dl className="mt-8 flex flex-wrap gap-x-10 gap-y-4">
+                <Metric value={featured.totalCount} label="Công thức đã đăng" />
+                {categories.length > 0 && (
+                  <Metric value={categories.length} label="Danh mục" />
+                )}
+                {quick.totalCount > 0 && (
+                  <Metric value={quick.totalCount} label="Món dưới 30 phút" />
+                )}
+              </dl>
+            )}
+          </div>
+
+          <div className="relative">
             <Image
-              className="dark:invert h-[14px] w-4"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={14}
+              src="/hero-kitchen.jpg"
+              alt="Bàn bếp mộc với rau thơm, gia vị, dầu ô liu và rau củ nướng"
+              width={1600}
+              height={1100}
+              priority
+              sizes="(min-width: 1024px) 50vw, 100vw"
+              className="aspect-[4/3] w-full rounded-3xl object-cover shadow-lift"
             />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
+            {quick.totalCount > 0 && (
+              <div className="absolute bottom-5 left-5 flex items-center gap-3 rounded-2xl border border-border bg-card/95 px-4 py-3 shadow-card backdrop-blur">
+                <span className="grid h-10 w-10 place-items-center rounded-full bg-primary-soft text-primary">
+                  <Timer className="h-5 w-5" aria-hidden />
+                </span>
+                <div>
+                  <p className="text-sm font-semibold">Dưới 30 phút</p>
+                  <p className="text-xs text-muted-foreground">{quick.totalCount} món cho ngày thường</p>
+                </div>
+              </div>
+            )}
+          </div>
         </div>
-      </main>
+      </section>
+
+      {categories.length > 0 && (
+        <section className="mx-auto max-w-7xl px-4 py-16 sm:px-6">
+          <SectionHead
+            title="Danh mục"
+            subtitle="Chọn kiểu món, rồi chọn món."
+            href="/categories"
+            linkLabel="Xem tất cả"
+          />
+
+          <div className="mt-8 grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-4">
+            {categories.map((c) => (
+              <Link
+                key={c.id}
+                href={`/recipes?categoryId=${c.id}`}
+                className="group flex items-center gap-3 rounded-2xl border border-border bg-card p-4 shadow-card transition-all hover:-translate-y-1 hover:shadow-lift"
+              >
+                <span className="grid h-11 w-11 shrink-0 place-items-center rounded-xl bg-primary-soft text-primary transition-colors group-hover:bg-primary group-hover:text-primary-foreground">
+                  <CategoryIcon name={c.name} className="h-5 w-5" />
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate font-display text-base">{c.name}</span>
+                  <span className="block text-xs text-muted-foreground">
+                    {c.recipeCount} công thức
+                  </span>
+                </span>
+              </Link>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="mx-auto max-w-7xl px-4 pb-8 pt-4 sm:px-6">
+        <SectionHead
+          title="Công thức mới nhất"
+          subtitle="Những món vừa được đăng trên blog."
+          href="/recipes"
+          linkLabel="Tất cả công thức"
+        />
+
+        {featured.items.length > 0 ? (
+          <div className="mt-8 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            {featured.items.map((r) => (
+              <RecipeCard key={r.id} recipe={r} />
+            ))}
+          </div>
+        ) : (
+          <p className="mt-8 rounded-2xl border border-dashed border-border bg-card p-10 text-center text-sm text-muted-foreground">
+            Chưa có công thức nào được đăng. Hãy là người đầu tiên chia sẻ món của bạn.
+          </p>
+        )}
+
+        <div className="mt-10 rounded-3xl bg-ink px-6 py-12 text-center text-ink-foreground sm:px-12">
+          <h2 className="font-display text-3xl">Nấu món đáng để ghi lại</h2>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-relaxed opacity-80">
+            Có món mà bạn bè cứ hỏi cách làm? Đăng lên đây kèm thời gian, nguyên liệu và hình ảnh
+            đầy đủ.
+          </p>
+          <Link
+            href="/dashboard/recipes/new"
+            className="mt-7 inline-flex items-center gap-2 rounded-full bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground transition-opacity hover:opacity-90"
+          >
+            Viết công thức
+            <ArrowRight className="h-4 w-4" aria-hidden />
+          </Link>
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function SectionHead({
+  title,
+  subtitle,
+  href,
+  linkLabel,
+}: {
+  title: string;
+  subtitle: string;
+  href: string;
+  linkLabel: string;
+}) {
+  return (
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-4">
+      <div className="min-w-0">
+        <h2 className="font-display text-3xl sm:text-4xl">{title}</h2>
+        <p className="mt-2 text-muted-foreground">{subtitle}</p>
+      </div>
+      <Link
+        href={href}
+        className="hidden shrink-0 items-center gap-1.5 text-sm font-medium text-primary sm:inline-flex"
+      >
+        {linkLabel}
+        <ArrowRight className="h-4 w-4" aria-hidden />
+      </Link>
+    </div>
+  );
+}
+
+function Metric({ value, label }: { value: number; label: string }) {
+  return (
+    <div>
+      <dt className="sr-only">{label}</dt>
+      <dd>
+        <span className="block font-display text-2xl">{value}</span>
+        <span className="block text-xs uppercase tracking-wider text-muted-foreground">{label}</span>
+      </dd>
     </div>
   );
 }
