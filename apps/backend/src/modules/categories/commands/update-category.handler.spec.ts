@@ -1,8 +1,4 @@
-import {
-  ConflictException,
-  ForbiddenException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ForbiddenException, NotFoundException } from '@nestjs/common';
 import { CacheService } from '../../../infrastructure/cache/cache.service';
 import { UpdateCategoryCommand } from './update-category.command';
 import { UpdateCategoryHandler } from './update-category.handler';
@@ -27,7 +23,10 @@ describe('UpdateCategoryHandler', () => {
   function buildHandler(result: unknown[] = [updated]) {
     const returning = jest.fn().mockResolvedValue(result);
     const updateWhere = jest.fn(() => ({ returning }));
-    const updateSet = jest.fn(() => ({ where: updateWhere }));
+    const updateSet = jest.fn((changes: Record<string, unknown>) => {
+      void changes;
+      return { where: updateWhere };
+    });
     const update = jest.fn(() => ({ set: updateSet }));
     const db = { update };
     const cache = {
