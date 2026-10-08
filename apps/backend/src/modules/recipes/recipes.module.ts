@@ -13,6 +13,7 @@ import { UnpublishRecipeHandler } from './commands/unpublish-recipe.handler';
 import { UpdateRecipeHandler } from './commands/update-recipe.handler';
 import { RecipesController } from './recipes.controller';
 import { GetRecipesHandler } from './queries/get-recipes.handler';
+import { SearchRecipesHandler } from './queries/search-recipes.handler';
 import { RecipeIngredientsService } from './recipe-ingredients.service';
 import { MediaModule } from '../media/media.module';
 import { JobsModule } from '../../infrastructure/jobs/jobs.module';
@@ -40,6 +41,7 @@ import { DeleteRecipeHandler } from './commands/delete-recipe.handler';
     UnpublishRecipeHandler,
     UpdateRecipeHandler,
     GetRecipesHandler,
+    SearchRecipesHandler,
     RecipeStatusService,
     JwtAuthGuard,
     OptionalJwtAuthGuard,
