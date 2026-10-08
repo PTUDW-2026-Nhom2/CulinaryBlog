@@ -62,6 +62,10 @@ import { RecipeIngredientResponseDto } from './dto/recipe.dto';
 import { RecipeImagesService } from '../media/recipe-images.service';
 import { UploadFile, MAX_FILE_SIZE } from '../media/file-storage.service';
 import { FileUploadExceptionInterceptor } from '../media/file-upload-exception.interceptor';
+import { RecipeImageUploadService } from './recipe-image-upload.service';
+import { RecipeStepsService } from './recipe-steps.service';
+import { RecipeDetailsService } from './recipe-details.service';
+import { CreateRecipeStepDto, UpdateRecipeStepDto } from './dto/recipe-step.dto';
 
 @ApiTags('recipes')
 @Controller('recipes')
@@ -71,6 +75,9 @@ export class RecipesController {
     private readonly queryBus: QueryBus,
     private readonly recipeIngredients: RecipeIngredientsService,
     private readonly recipeImages: RecipeImagesService,
+    private readonly recipeImageUpload: RecipeImageUploadService,
+    private readonly recipeSteps: RecipeStepsService,
+    private readonly recipeDetails: RecipeDetailsService,
   ) {}
 
   @Get('search')
@@ -86,6 +93,16 @@ export class RecipesController {
     query: SearchRecipesQueryParams,
   ): Promise<PagedResult<RecipeSearchResultDto>> {
     return this.queryBus.execute(new SearchRecipesQuery(query));
+  }
+
+  @Get(':slug')
+  @UseGuards(OptionalJwtAuthGuard)
+  @ApiBearerAuth()
+  getBySlug(
+    @Param('slug') slug: string,
+    @CurrentUser() user: AuthenticatedUser | undefined,
+  ): Promise<RecipeDto> {
+    return this.recipeDetails.getBySlug(slug, user);
   }
 
   @Get(':id/ingredients')
@@ -162,6 +179,56 @@ export class RecipesController {
     await this.recipeIngredients.remove(id, ingredientId, user);
   }
 
+  @Get(':id/steps')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Author', 'Admin')
+  @ApiBearerAuth()
+  listSteps(
+    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: HttpStatus.BAD_REQUEST })) id: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.recipeSteps.list(id, user);
+  }
+
+  @Post(':id/steps')
+  @HttpCode(HttpStatus.CREATED)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Author', 'Admin')
+  @ApiBearerAuth()
+  createStep(
+    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: HttpStatus.BAD_REQUEST })) id: string,
+    @Body() dto: CreateRecipeStepDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.recipeSteps.create(id, dto, user);
+  }
+
+  @Put(':id/steps/:stepId')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Author', 'Admin')
+  @ApiBearerAuth()
+  updateStep(
+    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: HttpStatus.BAD_REQUEST })) id: string,
+    @Param('stepId', new ParseUUIDPipe({ errorHttpStatusCode: HttpStatus.BAD_REQUEST })) stepId: string,
+    @Body() dto: UpdateRecipeStepDto,
+    @CurrentUser() user: AuthenticatedUser,
+  ) {
+    return this.recipeSteps.update(id, stepId, dto, user);
+  }
+
+  @Delete(':id/steps/:stepId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles('Author', 'Admin')
+  @ApiBearerAuth()
+  deleteStep(
+    @Param('id', new ParseUUIDPipe({ errorHttpStatusCode: HttpStatus.BAD_REQUEST })) id: string,
+    @Param('stepId', new ParseUUIDPipe({ errorHttpStatusCode: HttpStatus.BAD_REQUEST })) stepId: string,
+    @CurrentUser() user: AuthenticatedUser,
+  ): Promise<void> {
+    return this.recipeSteps.remove(id, stepId, user);
+  }
+
   @Get()
   @UseGuards(OptionalJwtAuthGuard)
   getRecipes(
@@ -204,7 +271,7 @@ export class RecipesController {
         detail: 'A file is required.',
       });
     }
-    return this.recipeImages.upload(id, user, file, altText);
+    return this.recipeImageUpload.upload(id, user, file, altText);
   }
 
   @Patch(':id/images/:imageId/primary')
