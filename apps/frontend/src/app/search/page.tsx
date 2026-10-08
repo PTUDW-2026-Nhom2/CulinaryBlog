@@ -1,6 +1,5 @@
 import type {
   CategoryDto,
-  DifficultyLevel,
   PagedResponse,
   RecipeSearchResultDto,
 } from "@culinary/shared";
@@ -9,82 +8,21 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { RecipeCard } from "@/components/RecipeCard";
 import { apiGet, apiGetPaged } from "@/lib/api";
+import {
+  buildSearchHref,
+  normalizeSearchQuery,
+  PAGE_SIZE,
+  type SearchPageQuery,
+  type SearchParams,
+} from "./helpers";
 
 export const metadata: Metadata = {
   title: "Tìm kiếm công thức",
   description: "Tìm kiếm công thức nấu ăn bằng từ khóa, danh mục, độ khó và thời gian nấu.",
 };
 
-const PAGE_SIZE = 12;
-const SORT_VALUES = [
-  "relevance",
-  "-createdAt",
-  "createdAt",
-  "title",
-  "-title",
-  "cookTime",
-  "-cookTime",
-] as const;
-const DIFFICULTIES: DifficultyLevel[] = ["Easy", "Medium", "Hard"];
-
-type SortValue = (typeof SORT_VALUES)[number];
-type SearchParams = Record<string, string | string[] | undefined>;
-
-interface SearchPageQuery {
-  q: string;
-  page: number;
-  categoryId?: string;
-  difficulty?: DifficultyLevel;
-  maxCookTime?: number;
-  minServings?: number;
-  sort: SortValue;
-}
-
 interface SearchPageProps {
   searchParams: Promise<SearchParams>;
-}
-
-function firstValue(value: string | string[] | undefined): string | undefined {
-  return Array.isArray(value) ? value[0] : value;
-}
-
-function positiveInteger(value: string | undefined): number | undefined {
-  if (!value || !/^\d+$/.test(value)) return undefined;
-  const parsed = Number(value);
-  return Number.isSafeInteger(parsed) && parsed > 0 ? parsed : undefined;
-}
-
-function normalizePage(value: string | undefined): number {
-  return positiveInteger(value) ?? 1;
-}
-
-function normalizeSort(value: string | undefined): SortValue {
-  return SORT_VALUES.includes(value as SortValue) ? (value as SortValue) : "relevance";
-}
-
-function normalizeDifficulty(value: string | undefined): DifficultyLevel | undefined {
-  return DIFFICULTIES.includes(value as DifficultyLevel)
-    ? (value as DifficultyLevel)
-    : undefined;
-}
-
-function normalizeUuid(value: string | undefined): string | undefined {
-  return value && /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
-    ? value
-    : undefined;
-}
-
-function buildSearchHref(query: SearchPageQuery, page?: number): string {
-  const params = new URLSearchParams();
-  if (query.q) params.set("q", query.q);
-  if (page && page > 1) params.set("page", String(page));
-  if (query.categoryId) params.set("categoryId", query.categoryId);
-  if (query.difficulty) params.set("difficulty", query.difficulty);
-  if (query.maxCookTime !== undefined) params.set("maxCookTime", String(query.maxCookTime));
-  if (query.minServings !== undefined) params.set("minServings", String(query.minServings));
-  if (query.sort !== "relevance") params.set("sort", query.sort);
-  const search = params.toString();
-  return search ? `/search?${search}` : "/search";
 }
 
 function emptyResult(page: number): PagedResponse<RecipeSearchResultDto> {
@@ -103,15 +41,7 @@ function emptyResult(page: number): PagedResponse<RecipeSearchResultDto> {
 
 export default async function SearchPage({ searchParams }: SearchPageProps) {
   const params = await searchParams;
-  const query: SearchPageQuery = {
-    q: firstValue(params.q)?.trim() ?? "",
-    page: normalizePage(firstValue(params.page)),
-    categoryId: normalizeUuid(firstValue(params.categoryId)),
-    difficulty: normalizeDifficulty(firstValue(params.difficulty)),
-    maxCookTime: positiveInteger(firstValue(params.maxCookTime)),
-    minServings: positiveInteger(firstValue(params.minServings)),
-    sort: normalizeSort(firstValue(params.sort)),
-  };
+  const query = normalizeSearchQuery(params);
   const result = await loadSearch(query);
   const hasActiveFilters = Boolean(
     query.categoryId ||
@@ -141,6 +71,7 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
           aria-label="Tìm kiếm công thức"
           className="field py-3.5 pl-11 pr-28"
         />
+        <SearchQueryHiddenFields query={query} includeQuery={false} includeFilters />
         <button
           type="submit"
           className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-primary px-5 py-2 text-sm font-semibold text-primary-foreground"
@@ -150,13 +81,21 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
       </form>
 
       <div className="mt-10 grid gap-8 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <SearchFilters query={query} categories={result.categories} />
+        <SearchFilters
+          query={query}
+          categories={result.categories}
+          categoriesError={result.categoriesError}
+        />
 
         <section>
-          {query.q.length === 0 ? (
+          {query.termState === "empty" ? (
             <SearchPrompt message="Nhập ít nhất hai ký tự để bắt đầu tìm kiếm." />
-          ) : query.q.length < 2 ? (
+          ) : query.termState === "tooShort" ? (
             <SearchPrompt message="Từ khóa cần có ít nhất hai ký tự." />
+          ) : query.termState === "tooLong" ? (
+            <SearchPrompt message="Từ khóa không được dài quá 200 ký tự." />
+          ) : query.termState === "invalid" ? (
+            <SearchPrompt message="Từ khóa phải có ít nhất một chữ cái hoặc chữ số." />
           ) : result.error ? (
             <SearchError />
           ) : (
@@ -169,42 +108,77 @@ export default async function SearchPage({ searchParams }: SearchPageProps) {
 }
 
 async function loadSearch(query: SearchPageQuery) {
-  try {
-    const categories = await apiGet<CategoryDto[]>("/categories", undefined, { cache: "no-store" });
-    if (query.q.length < 2) {
-      return { categories, recipes: emptyResult(query.page), error: false };
-    }
+  const categoriesPromise = apiGet<CategoryDto[]>("/categories", undefined, { cache: "no-store" });
+  const recipesPromise =
+    query.termState === "valid"
+      ? apiGetPaged<RecipeSearchResultDto>(
+          "/recipes/search",
+          {
+            q: query.q,
+            page: query.page,
+            pageSize: PAGE_SIZE,
+            categoryId: query.categoryId,
+            difficulty: query.difficulty,
+            maxCookTime: query.maxCookTime,
+            minServings: query.minServings,
+            sort: query.sort,
+          },
+          { cache: "no-store" },
+        )
+      : Promise.resolve(emptyResult(query.page));
 
-    try {
-      const recipes = await apiGetPaged<RecipeSearchResultDto>(
-        "/recipes/search",
-        {
-          q: query.q,
-          page: query.page,
-          pageSize: PAGE_SIZE,
-          categoryId: query.categoryId,
-          difficulty: query.difficulty,
-          maxCookTime: query.maxCookTime,
-          minServings: query.minServings,
-          sort: query.sort,
-        },
-        { cache: "no-store" },
-      );
-      return { categories, recipes, error: false };
-    } catch {
-      return { categories, recipes: emptyResult(query.page), error: true };
-    }
-  } catch {
-    return { categories: [], recipes: emptyResult(query.page), error: true };
-  }
+  const [categoriesResult, recipesResult] = await Promise.allSettled([
+    categoriesPromise,
+    recipesPromise,
+  ]);
+
+  return {
+    categories: categoriesResult.status === "fulfilled" ? categoriesResult.value : [],
+    recipes: recipesResult.status === "fulfilled" ? recipesResult.value : emptyResult(query.page),
+    error: recipesResult.status === "rejected",
+    categoriesError: categoriesResult.status === "rejected",
+  };
+}
+
+function SearchQueryHiddenFields({
+  query,
+  includeQuery = true,
+  includeFilters = false,
+}: {
+  query: SearchPageQuery;
+  includeQuery?: boolean;
+  includeFilters?: boolean;
+}) {
+  return (
+    <>
+      {includeQuery && query.q && <input type="hidden" name="q" value={query.q} />}
+      {includeFilters && query.categoryId && (
+        <input type="hidden" name="categoryId" value={query.categoryId} />
+      )}
+      {includeFilters && query.difficulty && (
+        <input type="hidden" name="difficulty" value={query.difficulty} />
+      )}
+      {includeFilters && query.maxCookTime !== undefined && (
+        <input type="hidden" name="maxCookTime" value={query.maxCookTime} />
+      )}
+      {includeFilters && query.minServings !== undefined && (
+        <input type="hidden" name="minServings" value={query.minServings} />
+      )}
+      {includeFilters && query.sort !== "relevance" && (
+        <input type="hidden" name="sort" value={query.sort} />
+      )}
+    </>
+  );
 }
 
 function SearchFilters({
   query,
   categories,
+  categoriesError,
 }: {
   query: SearchPageQuery;
   categories: CategoryDto[];
+  categoriesError: boolean;
 }) {
   const activeFilters = [
     query.categoryId,
@@ -222,14 +196,19 @@ function SearchFilters({
           Bộ lọc
         </h2>
         {activeFilters > 0 && (
-          <Link href={buildSearchHref({ q: query.q, page: 1, sort: "relevance" })} className="text-xs font-semibold text-primary">
+          <Link href={buildSearchHref({ q: query.q, sort: "relevance" })} className="text-xs font-semibold text-primary">
             Xóa
           </Link>
         )}
       </div>
+      {categoriesError && (
+        <p className="text-xs text-muted-foreground" role="status">
+          Không thể tải danh mục; bạn vẫn có thể tìm kiếm theo từ khóa.
+        </p>
+      )}
 
       <form action="/search" className="space-y-6">
-        <input type="hidden" name="q" value={query.q} />
+        <SearchQueryHiddenFields query={query} />
 
         <label className="block">
           <span className="mb-1.5 block text-sm font-medium">Danh mục</span>
@@ -321,7 +300,7 @@ function SearchResults({
         </p>
         {hasActiveFilters && (
           <Link
-            href={buildSearchHref({ q: query.q, page: 1, sort: "relevance" })}
+            href={buildSearchHref({ q: query.q, sort: "relevance" })}
             className="mt-5 inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 text-sm font-medium transition-colors hover:border-primary hover:text-primary"
           >
             <RotateCcw className="h-4 w-4" aria-hidden />
