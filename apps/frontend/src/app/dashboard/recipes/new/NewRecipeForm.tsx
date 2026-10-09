@@ -44,6 +44,8 @@ export function NewRecipeForm() {
   }, []);
 
   useEffect(() => {
+    // Request danh mục là side effect bên ngoài; state chỉ được cập nhật khi response trả về.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void loadCategories();
   }, [loadCategories]);
 
