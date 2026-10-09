@@ -68,7 +68,7 @@ export default function StepsField({ value, onChange, disabled = false }: StepsF
               <GripVertical className="hidden h-4 w-4 shrink-0 text-muted-foreground sm:block" aria-hidden />
               <span className="grid h-8 w-8 shrink-0 place-items-center rounded-full bg-primary font-display text-sm font-semibold text-primary-foreground">{row.stepNumber}</span>
               <label className="sr-only" htmlFor={`${row.id}-title`}>Step title</label>
-              <input id={`${row.id}-title`} className="field min-w-0 flex-1" placeholder="Step title (optional)" value={row.title} onChange={(event) => updateRow(row.id, { title: event.target.value })} disabled={disabled} />
+              <input id={`${row.id}-title`} className="field min-w-0 flex-1" placeholder="Step title" value={row.title} onChange={(event) => updateRow(row.id, { title: event.target.value })} disabled={disabled} required />
               <label className="sr-only" htmlFor={`${row.id}-timer`}>Duration in minutes</label>
               <input id={`${row.id}-timer`} className="field w-24 shrink-0" type="number" min="0" placeholder="Min" value={row.timerMinutes ?? ''} onChange={(event) => updateRow(row.id, { timerMinutes: event.target.value === '' ? undefined : Number(event.target.value) })} disabled={disabled} />
               <button type="button" aria-label="Move step up" className="hidden rounded-lg p-1.5 text-muted-foreground hover:bg-card hover:text-foreground disabled:opacity-30 sm:block" onClick={() => move(index, -1)} disabled={disabled || index === 0}><ArrowUp className="h-4 w-4" /></button>
@@ -76,7 +76,7 @@ export default function StepsField({ value, onChange, disabled = false }: StepsF
               <button type="button" aria-label="Remove step" className="rounded-lg p-1.5 text-muted-foreground hover:bg-secondary hover:text-destructive disabled:opacity-30" onClick={() => update(rows.filter((item) => item.id !== row.id))} disabled={disabled || rows.length === 1}><Trash2 className="h-4 w-4" /></button>
             </div>
             <label className="sr-only" htmlFor={`${row.id}-description`}>Step description</label>
-            <textarea id={`${row.id}-description`} rows={2} className="field mt-3 resize-y" placeholder="Describe what the cook should do, and what it should look like when it&apos;s right." value={row.description} onChange={(event) => updateRow(row.id, { description: event.target.value })} disabled={disabled} />
+            <textarea id={`${row.id}-description`} rows={2} className="field mt-3 resize-y" placeholder="Describe what the cook should do, and what it should look like when it&apos;s right." value={row.description} onChange={(event) => updateRow(row.id, { description: event.target.value })} disabled={disabled} required />
             <div className="mt-2 flex justify-end gap-1 sm:hidden">
               <button type="button" aria-label="Move step up" className="rounded-lg p-1.5 text-muted-foreground hover:bg-card hover:text-foreground disabled:opacity-30" onClick={() => move(index, -1)} disabled={disabled || index === 0}><ArrowUp className="h-4 w-4" /></button>
               <button type="button" aria-label="Move step down" className="rounded-lg p-1.5 text-muted-foreground hover:bg-card hover:text-foreground disabled:opacity-30" onClick={() => move(index, 1)} disabled={disabled || index === rows.length - 1}><ArrowDown className="h-4 w-4" /></button>

@@ -69,11 +69,11 @@ export default function IngredientsField({ value, onChange, disabled = false }: 
           <div key={row.id} className="grid gap-2 rounded-xl border border-border bg-surface p-3 sm:grid-cols-[auto_minmax(0,1fr)_90px_130px_minmax(0,1fr)_auto] sm:items-center">
             <GripVertical className="hidden h-4 w-4 shrink-0 text-muted-foreground sm:block" aria-hidden />
             <label className="sr-only" htmlFor={`${row.id}-name`}>Ingredient name</label>
-            <input id={`${row.id}-name`} className="field min-w-0" placeholder="Ingredient name" value={row.name} onChange={(event) => updateRow(row.id, { name: event.target.value })} disabled={disabled} />
+            <input id={`${row.id}-name`} className="field min-w-0" placeholder="Ingredient name" value={row.name} onChange={(event) => updateRow(row.id, { name: event.target.value })} disabled={disabled} required />
             <label className="sr-only" htmlFor={`${row.id}-quantity`}>Quantity</label>
-            <input id={`${row.id}-quantity`} className="field" type="number" min="0" step="0.001" placeholder="Qty" value={row.quantity ?? ''} onChange={(event) => updateRow(row.id, { quantity: event.target.value === '' ? undefined : Number(event.target.value) })} disabled={disabled} />
+            <input id={`${row.id}-quantity`} className="field" type="number" min="0.001" step="0.001" placeholder="Qty" value={row.quantity ?? ''} onChange={(event) => updateRow(row.id, { quantity: event.target.value === '' ? undefined : Number(event.target.value) })} disabled={disabled} required />
             <label className="sr-only" htmlFor={`${row.id}-unit`}>Unit</label>
-            <select id={`${row.id}-unit`} className="field" value={row.unit} onChange={(event) => updateRow(row.id, { unit: event.target.value })} disabled={disabled}>
+            <select id={`${row.id}-unit`} className="field" value={row.unit} onChange={(event) => updateRow(row.id, { unit: event.target.value })} disabled={disabled} required>
               {units.map((unit) => <option key={unit}>{unit}</option>)}
             </select>
             <label className="sr-only" htmlFor={`${row.id}-notes`}>Notes</label>
