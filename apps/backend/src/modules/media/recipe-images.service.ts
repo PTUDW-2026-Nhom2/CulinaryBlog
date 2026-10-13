@@ -7,14 +7,12 @@ import {
 } from '@nestjs/common';
 import { and, asc, eq } from 'drizzle-orm';
 import { AuthenticatedUser } from '../../common/auth/authenticated-user';
+import { CacheService } from '../../infrastructure/cache/cache.service';
 import {
   DATABASE_CONNECTION,
   Database,
 } from '../../infrastructure/database/database.module';
-import {
-  recipeImages,
-  recipes,
-} from '../../infrastructure/database/schema';
+import { recipeImages, recipes } from '../../infrastructure/database/schema';
 import {
   FileStorageService,
   UploadFile,
@@ -37,6 +35,7 @@ export class RecipeImagesService {
   constructor(
     @Inject(DATABASE_CONNECTION) private readonly db: Database,
     private readonly fileStorage: FileStorageService,
+    private readonly cache: CacheService,
   ) {}
 
   async upload(
@@ -47,10 +46,13 @@ export class RecipeImagesService {
   ): Promise<RecipeImageUploadResponse> {
     const normalizedAltText = this.normalizeAltText(altText);
     const recipe = await this.getOwnedRecipe(recipeId, user);
-    const stored = await this.fileStorage.uploadAsync(file, `recipes/${recipe.id}`);
+    const stored = await this.fileStorage.uploadAsync(
+      file,
+      `recipes/${recipe.id}`,
+    );
 
     try {
-      return await this.db.transaction(async (tx) => {
+      const image = await this.db.transaction(async (tx) => {
         const [existing] = await tx
           .select({ id: recipeImages.id })
           .from(recipeImages)
@@ -75,6 +77,8 @@ export class RecipeImagesService {
 
         return { ...this.toResponse(image), objectKey: image.objectKey };
       });
+      await this.cache.delete('recipes');
+      return image;
     } catch (error) {
       await this.fileStorage.deleteAsync(stored.key).catch(() => undefined);
       throw error;
@@ -88,7 +92,7 @@ export class RecipeImagesService {
   ): Promise<RecipeImageResponse> {
     await this.getOwnedRecipe(recipeId, user);
 
-    return this.db.transaction(async (tx) => {
+    const result = await this.db.transaction(async (tx) => {
       const [image] = await tx
         .select()
         .from(recipeImages)
@@ -120,13 +124,15 @@ export class RecipeImagesService {
 
       return this.toResponse(updated);
     });
+    await this.cache.delete('recipes');
+    return result;
   }
 
   async remove(
     recipeId: string,
     imageId: string,
     user: AuthenticatedUser,
-  ): Promise<void> {
+  ): Promise<string[]> {
     await this.getOwnedRecipe(recipeId, user);
     const deleted = await this.db.transaction(async (tx) => {
       const [image] = await tx
@@ -165,13 +171,12 @@ export class RecipeImagesService {
       return image;
     });
 
-    // DB deletion is already committed. Storage cleanup is best effort so a
-    // transient MinIO failure does not turn a successful DELETE into a 500.
-    await Promise.all([
+    await this.cache.delete('recipes');
+    return [
       deleted.objectKey,
       variantObjectKey(deleted.objectKey, 'medium'),
       variantObjectKey(deleted.objectKey, 'thumbnail'),
-    ].map((key) => this.fileStorage.deleteAsync(key).catch(() => undefined)));
+    ];
   }
 
   private async getOwnedRecipe(recipeId: string, user: AuthenticatedUser) {
@@ -201,10 +206,15 @@ export class RecipeImagesService {
   }
 
   private imageNotFound(): NotFoundException {
-    return new NotFoundException({ type: 'RECIPE_IMAGE_NOT_FOUND', status: 404 });
+    return new NotFoundException({
+      type: 'RECIPE_IMAGE_NOT_FOUND',
+      status: 404,
+    });
   }
 
-  private toResponse(image: typeof recipeImages.$inferSelect): RecipeImageResponse {
+  private toResponse(
+    image: typeof recipeImages.$inferSelect,
+  ): RecipeImageResponse {
     return {
       imageId: image.id,
       originalUrl: image.originalUrl,
