@@ -22,7 +22,7 @@ interface SearchResponse {
 const apiUrl = process.env.SEARCH_API_URL ?? 'http://127.0.0.1:5000';
 const databaseUrl = process.env.DATABASE_URL;
 const authorId = '2c3d4e5f-6071-48a9-bcde-f01234567890';
-const categoryId = '1a2b3c4d-5e6f-4789-abcd-ef01234567890';
+const categoryId = '1a2b3c4d-5e6f-4789-abcd-ef0123456789';
 const recipeIds = [
   '3a4b5c6d-7e8f-4901-abcd-ef2345678901',
   '4b5c6d7e-8f90-4a12-bcde-f23456789012',
